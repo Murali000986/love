@@ -1,11 +1,17 @@
 const express = require('express');
 const cookieSession = require('cookie-session');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const path = require('path');
 const bcrypt = require('bcrypt');
 
-dotenv.config();
+// Load config from config.json (no .env needed)
+const config = require('../config.json');
+Object.assign(process.env, {
+  PORT: config.PORT,
+  SESSION_SECRET: config.SESSION_SECRET,
+  ADMIN_USERNAME: config.ADMIN_USERNAME,
+  ADMIN_PASSWORD: config.ADMIN_PASSWORD
+});
 
 const { adminExists, saveAdmin } = require('./db/db');
 const apiRoutes = require('./routes/api');
