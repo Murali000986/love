@@ -4,20 +4,23 @@ const cors = require('cors');
 const path = require('path');
 const bcrypt = require('bcrypt');
 
-// Load config from config.json (no .env needed)
-const config = require('../config.json');
-Object.assign(process.env, {
-  PORT: config.PORT,
-  SESSION_SECRET: config.SESSION_SECRET,
-  ADMIN_USERNAME: config.ADMIN_USERNAME,
-  ADMIN_PASSWORD: config.ADMIN_PASSWORD
-});
+// Load config from config.json — works locally and on Vercel
+let config = {};
+try {
+  config = require('../config.json');
+} catch (e) {
+  console.warn('config.json not found, using defaults');
+}
+
+const PORT           = config.PORT           || process.env.PORT           || 3000;
+const SESSION_SECRET = config.SESSION_SECRET || process.env.SESSION_SECRET || 'love_meter_secret';
+const ADMIN_USERNAME = config.ADMIN_USERNAME || process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = config.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || 'adminpassword';
 
 const { adminExists, saveAdmin } = require('./db/db');
 const apiRoutes = require('./routes/api');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
@@ -26,45 +29,33 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(cookieSession({
   name: 'session',
-  secret: process.env.SESSION_SECRET || 'love_meter_secret',
+  secret: SESSION_SECRET,
   maxAge: 24 * 60 * 60 * 1000,
+  secure: false,
   httpOnly: true
 }));
 
-// Auto-create default admin from .env
+// Auto-create default admin on every cold start (needed for Vercel in-memory)
 const setupAdmin = async () => {
-  const username = process.env.ADMIN_USERNAME || 'admin';
-  const password = process.env.ADMIN_PASSWORD || 'adminpassword';
-
-  if (!adminExists(username)) {
-    const hashed = await bcrypt.hash(password, 10);
-    saveAdmin({ _id: Date.now().toString(), username, password: hashed });
-    console.log(`✅ Default admin created → Username: ${username}, Password: ${password}`);
+  if (!adminExists(ADMIN_USERNAME)) {
+    const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+    saveAdmin({ _id: Date.now().toString(), username: ADMIN_USERNAME, password: hashed });
+    console.log(`✅ Admin created → ${ADMIN_USERNAME} / ${ADMIN_PASSWORD}`);
   } else {
-    console.log(`ℹ️  Admin "${username}" already exists.`);
+    console.log(`ℹ️  Admin "${ADMIN_USERNAME}" already exists.`);
   }
 };
 
 setupAdmin();
 
-// Routes
+// API Routes
 app.use('/api', apiRoutes);
 
-// Serve production build
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../dist')));
-
-  app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/admin.html'));
-  });
-
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+// Only listen locally (Vercel handles this itself)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
   });
 }
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
 
 module.exports = app;
